@@ -1,0 +1,45 @@
+---
+## assumes zos collections are present
+- name: Replace lpar system parameters with .NEW
+  hosts: your_zos_lpar # or have this set to all and limit before the run
+  gather_facts: false
+  vars:
+    # should really be sourcing these elsewhere...
+    parameter_dataset: "SYS1.PARMLIB" 
+    parameter_member: "IEASYS00"     
+    new_parameter_suffix: ".NEW"
+
+  tasks:
+    - name: Define new parameter member name
+      ansible.builtin.set_fact:
+        new_member_name: "{{ parameter_member }}{{ new_parameter_suffix }}"
+
+    - name: Display restore details
+      ansible.builtin.debug:
+        msg: "Replacing {{ parameter_dataset }}({{ parameter_member }}) with {{ parameter_dataset }}({{ new_member_name }})"
+
+    - name: Check to make sure we have something to copy...
+      ibm.ibm_zos_core.zos_data_set:
+        name: "{{ parameter_dataset }}({{ new_member_name }})"
+        type: MEMBER
+        state: present
+      register: check_new_member
+
+    - name: Fail if .NEW member does not exist
+      ansible.builtin.fail:
+        msg: "The new parameter member {{ parameter_dataset }}({{ new_member_name }}) does not exist."
+      when: not check_new_member.exists
+
+    - name: Replace the active system parameter member with the .NEW version
+      ibm.ibm_zos_core.zos_copy:
+        src: "{{ parameter_dataset }}({{ new_member_name }})"
+        dest: "{{ parameter_dataset }}({{ parameter_member }})"
+        remote_src: true
+        force: true
+      register: copy_result
+      when: check_new_member.exists
+
+    - name: Display copy result
+      ansible.builtin.debug:
+        var: copy_result
+      when: check_new_member.exists

@@ -1,0 +1,35 @@
+---
+## assumes zos collections are present
+- name: Backup lpar system parameters to local
+  hosts: your_zos_lpar # or have this set to all and limit before the run
+  gather_facts: false
+  vars:
+    # should really be sourcing these elsewhere...
+    parameter_dataset: "SYS1.PARMLIB"
+    parameter_member: "IEASYS00" 
+    
+  tasks:
+    - name: Set fact - date format
+      ansible.builtin.set_fact:
+        current_date: "{{ lookup('pipe', 'date +%Y%m%d') }}"
+      delegate_to: localhost
+
+    - name: Set fact - Define backup member name
+      ansible.builtin.set_fact:
+        backup_member_name: "{{ parameter_member }}.{{ current_date }}"
+
+    - name: Display backup details
+      ansible.builtin.debug:
+        msg: "Backing up {{ parameter_dataset }}({{ parameter_member }}) to {{ parameter_dataset }}({{ backup_member_name }})"
+
+    - name: Running backup
+      ibm.ibm_zos_core.zos_copy:
+        src: "{{ parameter_dataset }}({{ parameter_member }})"
+        dest: "{{ parameter_dataset }}({{ backup_member_name }})"
+        remote_src: true 
+        force: false     # because were purposefully overwriting
+      register: copy_result
+
+    - name: Display result
+      ansible.builtin.debug:
+        var: copy_result
